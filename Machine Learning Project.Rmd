@@ -1,0 +1,146 @@
+---
+title: "Machine Learning Project"
+author: "Steve  Burch"
+date: "Sunday, May 24, 2015"
+output: html_document
+---
+
+## Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks.
+  
+One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, the goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+
+More information can be found here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+## Goal & Expectation
+
+We are going to run our "trained" model against the 20 Test Cases provided.
+
+I would like <= 1% error in my predictive model.
+
+## The Data
+  
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+And, the test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+
+## Data Manipulation
+
+### (Please set your data directory appropriately)
+```{r}
+setwd("E:/MyStuff/Myfiles/Coursera/8_MachineLearning")
+library(caret)
+```
+
+### read files previously downloaded files
+
+```{r}
+training <- read.csv("pml-training.csv")
+test_data <- read.csv("pml-testing.csv")
+dim(training_data)
+```
+
+The training_data has 19,622 observations of 160 variables.
+
+### split the training data into training and validation data sets
+```{r}
+set.seed(777)
+trainingParition <- createDataPartition(training$classe, p = 0.7, list = FALSE)
+training_data <- training[trainingParition, ]
+validation_data <- training[-trainingParition, ]
+```
+
+We will exclude NAs and near zero variance features from the training data, and other nefarious columns
+
+```{r}
+nearZeroCols <- nearZeroVar(training_data)
+training_data <- training_data[, -nearZeroCols]
+```
+
+Find cols that have some NAs or are empty, we want to count occurrences
+
+```{r}
+badColsLen <- sapply(training_data, function(x) {
+    sum(!(is.na(x) | x == ""))
+})
+```
+
+Get rid of those with 40% or more of missing values
+
+```{r}
+tossCols <- names(badColsLen[badColsLen < 0.6 * length(training_data$classe)])
+training_data  <- training_data[, !names(training_data) %in% tossCols]
+```
+
+And other Columns I don't want
+
+```{r}
+tossCols <- c("X","user_name","raw_timestamp_part_1","raw_timestamp_part_2","cvtd_timestamp","new_window","num_window")
+training_data  <- training_data[, !names(training_data) %in% tossCols]
+
+dim(training_data)
+```
+
+Now we have 53 columns!
+
+## Training the Model Using Random Forest
+
+We are trying to come up with a Model to predict the classe variable.  
+Random Forest is a good out-of-the-box choice.
+
+```{r}
+library(randomForest)
+modelRF <- randomForest(classe ~ ., data = training_data, importance = TRUE, ntrees = 10)
+```
+
+## Test the Model
+
+We will use the model against the training data first, to examine how well  
+Random Forest worked on our reduced set of columns.
+
+
+```{r}
+predictTraining <- predict(modelRF, training_data)
+print(confusionMatrix(predictTraining, training_data$classe))
+```
+
+We are getting an accuracy of 100%, with a 95% CI, so that's excellent! (or we have over fitted)
+
+### Cross Validate against our Validation data set (which still has all the extra columns) to see how well the model works
+
+```{r}
+predictVal <- predict(modelRF, validation_data)
+print(confusionMatrix(predictVal, validation_data$classe))
+```
+
+Here we get .9946, so we can be happy with our RF Model.
+
+
+### Apply our Model to the Test data set
+```{r}
+predictTest <- predict(modelRF, test_data)
+##predictTest   commented out so I don't give answers away/get in trouble
+```
+
+### Now, we want to write the output to files...
+
+```{r}
+predictTest <- as.vector(predictTest)
+pml_write_files = function(x){
+    n = length(x)
+    for(i in 1:n){
+        filename = paste0("problem_id_",i,".txt")
+        write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+    }
+}
+
+pml_write_files(predictTest)
+```
+## THE END!
+
